@@ -1,0 +1,43 @@
+{
+  "name": "merge-editor",
+  "version": "1.0.0",
+  "description": "MergeEditor - マージ機能付きWindowsデスクトップエディタ",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder --win --x64",
+    "dist": "electron-builder --win --x64",
+    "build:portable": "electron-builder --win portable --x64"
+  },
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "monaco-editor": "^0.45.0"
+  },
+  "devDependencies": {
+    "electron": "^30.0.0",
+    "electron-builder": "^24.13.3"
+  },
+  "build": {
+    "appId": "com.example.mergeeditor",
+    "productName": "MergeEditor",
+    "directories": {
+      "output": "dist"
+    },
+    "win": {
+      "target": "nsis",
+      "icon": "assets/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "src/**/*",
+      "node_modules/**/*"
+    ]
+  }
+}

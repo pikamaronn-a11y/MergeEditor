@@ -18,6 +18,10 @@ let highlightedRanges = [];          // [{startLine, endLine, blockIndex}]
 let changeDecorationIds = [];        // デコレーションID配列
 let pendingFileChange = null;
 let currentLanguage = 'plaintext';
+let currentFontFamily = 'Consolas';
+let currentFontSize = 12;
+let currentUiFontFamily = 'Segoe UI';
+let currentUiFontSize = 10;
 let blockChoices = [];               // null=未解決, 'mine'=自分, 'external'=外部
 let conflictViewZoneIds = [];        // View Zone ID配列
 let conflictWidgets = [];             // ContentWidget配列
@@ -29,6 +33,7 @@ const conflictToolbar = document.getElementById('conflict-toolbar');
 const conflictAcceptAllBtn = document.getElementById('conflict-accept-all-btn');
 const conflictKeepAllBtn = document.getElementById('conflict-keep-all-btn');
 const conflictToolbarInfo = conflictToolbar.querySelector('.conflict-toolbar-info');
+const statusFont = document.getElementById('status-font');
 
 /* ─── Utility Functions ──────────────────────────── */
 
@@ -665,10 +670,11 @@ require(['vs/editor/editor.main'], function () {
 
     editor = monaco.editor.create(document.getElementById('container'), {
         value: sampleCode, language: 'plaintext', theme: 'vs-dark',
-        automaticLayout: true, fontSize: 14, lineHeight: 21,
+        automaticLayout: true, fontSize: 12, lineHeight: 18,
         minimap: { enabled: true, maxColumn: 80 }, scrollBeyondLastLine: false,
         roundedSelection: true, padding: { top: 12 }, smoothScrolling: true,
         cursorSmoothCaretAnimation: 'on', tabSize: 4, wordWrap: 'off',
+        wrappingStrategy: 'advanced',
         lineNumbers: 'on', glyphMargin: true, folding: true,
         renderWhitespace: 'selection', fontLigatures: true,
         formatOnPaste: true, formatOnType: true
@@ -697,7 +703,51 @@ require(['vs/editor/editor.main'], function () {
 
     function updateWrapStatus() {
         statusWrap.textContent = '折り返し: ' + (isWrapped ? 'ON' : 'OFF');
-        statusWrap.title = '右端で折り返し: ' + (isWrapped ? 'ON' : 'OFF');
+        statusWrap.title = 'クリックで折り返しON/OFF（現在: ' + (isWrapped ? 'ON' : 'OFF') + '）';
+    }
+
+    function updateFontStatus() {
+        statusFont.textContent = currentFontFamily + ' ' + currentFontSize + 'px';
+        statusFont.title = 'エディターフォント: ' + currentFontFamily + ' ' + currentFontSize + 'px / UI: ' + currentUiFontFamily + ' ' + currentUiFontSize + 'px';
+    }
+
+    function setFontFamily(family) {
+        currentFontFamily = family;
+        editor.updateOptions({ fontFamily: family });
+        updateFontStatus();
+    }
+
+    function applyUiFont() {
+        document.documentElement.style.setProperty('--ui-font-family', "'" + currentUiFontFamily + "'");
+        document.documentElement.style.setProperty('--ui-font-size', currentUiFontSize + 'px');
+    }
+
+    function changeFontSize(delta) {
+        currentFontSize = Math.max(8, Math.min(48, currentFontSize + delta));
+        editor.updateOptions({ fontSize: currentFontSize, lineHeight: Math.round(currentFontSize * 1.5) });
+        updateFontStatus();
+        saveFontConfigAll();
+    }
+
+    function resetFontSize() {
+        currentFontSize = 12;
+        editor.updateOptions({ fontSize: currentFontSize, lineHeight: Math.round(currentFontSize * 1.5) });
+        updateFontStatus();
+        saveFontConfigAll();
+    }
+
+    function saveFontConfigAll() {
+        window.electronAPI.saveFontConfig({
+            editor: { family: currentFontFamily, size: currentFontSize },
+            ui: { family: currentUiFontFamily, size: currentUiFontSize }
+        });
+    }
+
+    function openFontSettings() {
+        window.electronAPI.openFontSettings({
+            editor: { family: currentFontFamily, size: currentFontSize },
+            ui: { family: currentUiFontFamily, size: currentUiFontSize }
+        });
     }
 
     /* ─── ステータスバー ────────────────────────── */
@@ -709,6 +759,36 @@ require(['vs/editor/editor.main'], function () {
         statusCursor.textContent = '行 ' + pos.lineNumber + ', 列 ' + pos.column;
         var model = editor.getModel();
         statusInfo.textContent = '行数: ' + model.getLineCount() + ' | 文字数: ' + model.getValueLength();
+        checkStatusbarOverflow();
+    }
+
+    var statusbarContent = document.getElementById('statusbar-content');
+    var isScrollEnabled = true;
+
+    function checkStatusbarOverflow() {
+        if (!statusbarContent) return;
+        var overflow = statusbarContent.scrollWidth - document.getElementById('statusbar').clientWidth;
+        if (overflow > 2) {
+            statusbarContent.style.setProperty('--marquee-offset', -overflow + 'px');
+            statusbarContent.classList.add('scroll-overflow');
+        } else {
+            statusbarContent.classList.remove('scroll-overflow');
+            statusbarContent.style.removeProperty('--marquee-offset');
+        }
+        updateScrollAnimationState();
+    }
+
+    function updateScrollAnimationState() {
+        if (isScrollEnabled && statusbarContent.classList.contains('scroll-overflow')) {
+            statusbarContent.classList.add('scroll-active');
+        } else {
+            statusbarContent.classList.remove('scroll-active');
+        }
+    }
+
+    function toggleStatusbarScroll() {
+        isScrollEnabled = !isScrollEnabled;
+        updateScrollAnimationState();
     }
 
     function markDirty() { if (!isDirty) { isDirty = true; updateFileName(); } }
@@ -748,6 +828,24 @@ require(['vs/editor/editor.main'], function () {
     });
 
     updateStatusBar();
+    updateFontStatus();
+
+    /* ─── 設定ファイルからフォント読み込み ────────── */
+    window.electronAPI.loadFontConfig().then(function (config) {
+        if (config) {
+            if (config.editor) {
+                currentFontFamily = config.editor.family;
+                currentFontSize = config.editor.size;
+                editor.updateOptions({ fontFamily: currentFontFamily, fontSize: currentFontSize, lineHeight: Math.round(currentFontSize * 1.5) });
+            }
+            if (config.ui) {
+                currentUiFontFamily = config.ui.family;
+                currentUiFontSize = config.ui.size;
+                applyUiFont();
+            }
+            updateFontStatus();
+        }
+    });
 
     /* ─── ファイル操作 ──────────────────────────── */
     async function openFile() {
@@ -782,7 +880,7 @@ require(['vs/editor/editor.main'], function () {
         try {
             var content = editor.getValue();
             var filePath = saveAs ? null : currentFilePath;
-            var savedPath = await window.electronAPI.saveFile({ filePath: filePath, content: content });
+            var savedPath = await window.electronAPI.saveFile({ filePath: filePath, content: content, language: currentLanguage });
             if (savedPath) {
                 currentFilePath = savedPath;
                 isDirty = false;
@@ -804,8 +902,8 @@ require(['vs/editor/editor.main'], function () {
             case 'save': saveFile(false); break;
             case 'save-as': saveFile(true); break;
             case 'revalidate': revalidateConflicts(); break;
-            case 'minimap-on': editor.updateOptions({ minimap: { enabled: true } }); break;
-            case 'minimap-off': editor.updateOptions({ minimap: { enabled: false } }); break;
+            case 'minimap-on': editor.updateOptions({ minimap: { enabled: true } }); setTimeout(function() { editor.layout(); }, 50); break;
+            case 'minimap-off': editor.updateOptions({ minimap: { enabled: false } }); setTimeout(function() { editor.layout(); }, 50); break;
             case 'set-language-plaintext': setLanguage('plaintext'); break;
             case 'set-language-javascript': setLanguage('javascript'); break;
             case 'set-language-typescript': setLanguage('typescript'); break;
@@ -817,8 +915,12 @@ require(['vs/editor/editor.main'], function () {
             case 'set-theme-vs': monaco.editor.setTheme('vs'); break;
             case 'set-theme-vs-dark': monaco.editor.setTheme('vs-dark'); break;
             case 'set-theme-hc-black': monaco.editor.setTheme('hc-black'); break;
-            case 'wrap-on': isWrapped = true; editor.updateOptions({ wordWrap: 'on' }); updateWrapStatus(); break;
-            case 'wrap-off': isWrapped = false; editor.updateOptions({ wordWrap: 'off' }); updateWrapStatus(); break;
+            case 'open-font-settings': openFontSettings(); break;
+            case 'font-size-up': changeFontSize(1); break;
+            case 'font-size-down': changeFontSize(-1); break;
+            case 'font-size-reset': resetFontSize(); break;
+            case 'wrap-on': isWrapped = true; editor.updateOptions({ wordWrap: 'on' }); setTimeout(function() { editor.layout(); }, 50); updateWrapStatus(); break;
+            case 'wrap-off': isWrapped = false; editor.updateOptions({ wordWrap: 'off' }); setTimeout(function() { editor.layout(); }, 50); updateWrapStatus(); break;
         }
     });
 
@@ -831,9 +933,69 @@ require(['vs/editor/editor.main'], function () {
         }
     });
 
+    /* ─── フォント設定適用 ──────────────────────── */
+    window.electronAPI.onFontSettingsApplied(function (settings) {
+        if (settings.editor) {
+            currentFontFamily = settings.editor.family;
+            currentFontSize = settings.editor.size;
+            editor.updateOptions({ fontFamily: currentFontFamily, fontSize: currentFontSize, lineHeight: Math.round(currentFontSize * 1.5) });
+        }
+        if (settings.ui) {
+            currentUiFontFamily = settings.ui.family;
+            currentUiFontSize = settings.ui.size;
+            applyUiFont();
+        }
+        updateFontStatus();
+    });
+
     /* ─── ステータスバー ────────────────────────── */
-    statusChangeIndicator.addEventListener('click', function () { scrollToFirstHighlight(); });
-    statusPendingCollision.addEventListener('click', function () { scrollToFirstHighlight(); });
+    statusChangeIndicator.addEventListener('click', function (e) { e.stopPropagation(); scrollToFirstHighlight(); });
+    statusPendingCollision.addEventListener('click', function (e) { e.stopPropagation(); scrollToFirstHighlight(); });
+
+    var statusFontEl = document.getElementById('status-font');
+    statusFontEl.addEventListener('click', function (e) {
+        e.stopPropagation();
+        openFontSettings();
+    });
+
+    var statusLanguageEl = document.getElementById('status-language');
+    statusLanguageEl.addEventListener('click', function (e) {
+        e.stopPropagation();
+        toggleStatusbarScroll();
+    });
+
+    var statusWrapEl = document.getElementById('status-wrap');
+    statusWrapEl.addEventListener('click', function (e) {
+        e.stopPropagation();
+        isWrapped = !isWrapped;
+        editor.updateOptions({ wordWrap: isWrapped ? 'on' : 'off' });
+        setTimeout(function() { editor.layout(); }, 50);
+        updateWrapStatus();
+    });
+
+    function copyToClipboard(text) {
+        navigator.clipboard.writeText(text).then(function () {
+            var original = statusCursor.style.opacity;
+            statusCursor.style.opacity = '0.5';
+            statusInfo.style.opacity = '0.5';
+            setTimeout(function () {
+                statusCursor.style.opacity = original;
+                statusInfo.style.opacity = '0.9';
+            }, 200);
+        });
+    }
+
+    statusCursor.addEventListener('click', function (e) {
+        e.stopPropagation();
+        copyToClipboard(statusCursor.textContent + ' | ' + statusInfo.textContent);
+    });
+
+    statusInfo.addEventListener('click', function (e) {
+        e.stopPropagation();
+        copyToClipboard(statusCursor.textContent + ' | ' + statusInfo.textContent);
+    });
+
+    window.addEventListener('resize', checkStatusbarOverflow);
 
     /* ─── 衝突解決ツールバー ボタン ──────────────── */
     conflictAcceptAllBtn.addEventListener('click', function () { resolveAll('external'); });
@@ -847,6 +1009,19 @@ require(['vs/editor/editor.main'], function () {
         editor.getAction('editor.action.formatDocument').run();
     });
     // 衝突の再検証はメニューの「編集 > 衝突を再検証」(Ctrl+Shift+R) から実行
+
+    /* ─── Ctrl+マウスホイールでフォントサイズ変更 ──── */
+    editor.getDomNode().addEventListener('wheel', function (e) {
+        if (e.ctrlKey) {
+            e.preventDefault();
+            e.stopPropagation();
+            if (e.deltaY > 0) {
+                changeFontSize(1);
+            } else if (e.deltaY < 0) {
+                changeFontSize(-1);
+            }
+        }
+    }, { passive: false });
 
     console.log('MergeEditor initialized with ContentWidget conflict panels.');
 });

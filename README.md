@@ -21,7 +21,7 @@ Monaco Editor（VS Codeと同じエンジン）をベースにした、マージ
 ## インストール
 
 ### ビルド済みパッケージからインストール
-`dist/MergeEditor Setup 1.0.0.exe` を実行してインストールしてください。
+`dist/MergeEditor Setup 1.1.0.exe` を実行してインストールしてください。
 
 ### ソースからビルド
 ```bash
@@ -36,7 +36,7 @@ npm start
 npm run build
 ```
 
-ビルド完了後、`dist/MergeEditor Setup 1.0.0.exe` が生成されます。
+ビルド完了後、`dist/MergeEditor Setup 1.1.0.exe` が生成されます。
 
 ### ポータブル版をビルド
 インストール不要で実行できるポータブル版をビルドする場合：
@@ -44,7 +44,7 @@ npm run build
 npm run build:portable
 ```
 
-ビルド完了後、`dist/MergeEditor 1.0.0.exe` が生成されます。このファイルは単体で実行可能です。
+ビルド完了後、`dist/MergeEditor 1.1.0.exe` が生成されます。このファイルは単体で実行可能です。
 
 ## 使い方
 

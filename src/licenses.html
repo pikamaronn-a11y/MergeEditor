@@ -4,21 +4,25 @@
     <meta charset="UTF-8">
     <title>ライブラリライセンス</title>
     <style>
+        :root {
+            --ui-font-family: 'Segoe UI', 'Meiryo', sans-serif;
+            --ui-font-size: 10px;
+        }
         body {
-            font-family: 'Segoe UI', 'Meiryo', sans-serif;
+            font-family: var(--ui-font-family);
             background: #1e1e1e;
             color: #d4d4d4;
             padding: 24px;
             margin: 0;
         }
-        h1 { font-size: 18px; color: #4fc3f7; margin-bottom: 16px; }
-        h2 { font-size: 15px; color: #cccccc; margin-top: 20px; margin-bottom: 8px; border-bottom: 1px solid #3e3e42; padding-bottom: 4px; }
+        h1 { font-size: calc(var(--ui-font-size) * 1.8); color: #4fc3f7; margin-bottom: 16px; }
+        h2 { font-size: calc(var(--ui-font-size) * 1.5); color: #cccccc; margin-top: 20px; margin-bottom: 8px; border-bottom: 1px solid #3e3e42; padding-bottom: 4px; }
         pre {
             background: #2d2d30;
             border: 1px solid #3e3e42;
             border-radius: 4px;
             padding: 12px;
-            font-size: 12px;
+            font-size: calc(var(--ui-font-size) * 1.2);
             line-height: 1.6;
             white-space: pre-wrap;
             word-wrap: break-word;
@@ -34,8 +38,9 @@
             color: #fff;
             border: none;
             border-radius: 4px;
-            font-size: 14px;
+            font-size: calc(var(--ui-font-size) * 1.4);
             cursor: pointer;
+            font-family: var(--ui-font-family);
         }
         .close-btn:hover { background: #1a8cd8; }
     </style>
@@ -113,5 +118,18 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.</pre>
 
     <button class="close-btn" onclick="window.close()">閉じる</button>
+    <script>
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') window.close();
+        });
+        if (window.electronAPI) {
+            window.electronAPI.onApplyDialogFont(function(config) {
+                if (config && config.ui) {
+                    document.documentElement.style.setProperty('--ui-font-family', "'" + config.ui.family + "'");
+                    document.documentElement.style.setProperty('--ui-font-size', config.ui.size + 'px');
+                }
+            });
+        }
+    </script>
 </body>
 </html>

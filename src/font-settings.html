@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>フォント設定</title>
+    <style>
+        :root {
+            --ui-font-family: 'Segoe UI', 'Meiryo', sans-serif;
+            --ui-font-size: 10px;
+        }
+        body {
+            font-family: var(--ui-font-family);
+            background: #1e1e1e;
+            color: #d4d4d4;
+            padding: 24px;
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            box-sizing: border-box;
+        }
+        h1 { font-size: calc(var(--ui-font-size) * 1.8); color: #4fc3f7; margin-bottom: 16px; }
+        .section {
+            border: 1px solid #3e3e42;
+            border-radius: 6px;
+            padding: 16px;
+            margin-bottom: 16px;
+        }
+        .section-title {
+            font-size: calc(var(--ui-font-size) * 1.4);
+            font-weight: 600;
+            color: #4fc3f7;
+            margin-bottom: 12px;
+            padding-bottom: 6px;
+            border-bottom: 1px solid #3e3e42;
+        }
+        .form-group { margin-bottom: 12px; }
+        .form-group:last-child { margin-bottom: 0; }
+        label { display: block; font-size: calc(var(--ui-font-size) * 1.2); margin-bottom: 4px; color: #cccccc; }
+        select, input[type="number"] {
+            width: 100%;
+            padding: 6px 10px;
+            background: #2d2d30;
+            border: 1px solid #3e3e42;
+            border-radius: 4px;
+            color: #d4d4d4;
+            font-size: calc(var(--ui-font-size) * 1.3);
+            font-family: var(--ui-font-family);
+            box-sizing: border-box;
+        }
+        select:focus, input:focus {
+            outline: none;
+            border-color: #007acc;
+        }
+        .font-size-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .font-size-row input { flex: 1; }
+        .font-size-btn {
+            padding: 4px 12px;
+            background: #007acc;
+            color: #fff;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: calc(var(--ui-font-size) * 1.6);
+            font-weight: bold;
+            min-width: 32px;
+            font-family: var(--ui-font-family);
+        }
+        .font-size-btn:hover { background: #1a8cd8; }
+        .preview-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            margin-bottom: 16px;
+            min-height: 0;
+        }
+        .preview {
+            flex: 1;
+            background: #1e1e1e;
+            border: 1px solid #3e3e42;
+            border-radius: 4px;
+            padding: 16px;
+            overflow: auto;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            line-height: 1.6;
+        }
+        .ui-preview {
+            background: #007acc;
+            color: #fff;
+            border-radius: 3px;
+            padding: 4px 10px;
+            font-size: var(--ui-font-size);
+            display: inline-block;
+        }
+        .buttons {
+            display: flex;
+            justify-content: flex-end;
+            gap: 8px;
+        }
+        .btn {
+            padding: 8px 24px;
+            border: none;
+            border-radius: 4px;
+            font-size: calc(var(--ui-font-size) * 1.4);
+            cursor: pointer;
+            font-family: var(--ui-font-family);
+        }
+        .btn-ok { background: #007acc; color: #fff; }
+        .btn-ok:hover { background: #1a8cd8; }
+        .btn-cancel { background: #3e3e42; color: #cccccc; }
+        .btn-cancel:hover { background: #4e4e52; }
+    </style>
+</head>
+<body>
+    <h1>フォント設定</h1>
+
+    <div class="section">
+        <div class="section-title">📝 エディター</div>
+        <div class="form-group">
+            <label>フォントファミリ</label>
+            <select id="editor-font-family"></select>
+        </div>
+        <div class="form-group">
+            <label>フォントサイズ (8〜48px)</label>
+            <div class="font-size-row">
+                <button class="font-size-btn" id="editor-size-down">-</button>
+                <input type="number" id="editor-font-size" min="8" max="48" value="12">
+                <button class="font-size-btn" id="editor-size-up">+</button>
+            </div>
+        </div>
+        <div class="preview-container">
+            <label>プレビュー</label>
+            <div class="preview" id="editor-preview">function hello() {
+    console.log("Hello, World!");
+    // 日本語テキストの表示確認
+    return 0;
+}</div>
+        </div>
+    </div>
+
+    <div class="section">
+        <div class="section-title">🖥️ UI</div>
+        <div class="form-group">
+            <label>フォントファミリ</label>
+            <select id="ui-font-family"></select>
+        </div>
+        <div class="form-group">
+            <label>フォントサイズ (8〜24px)</label>
+            <div class="font-size-row">
+                <button class="font-size-btn" id="ui-size-down">-</button>
+                <input type="number" id="ui-font-size" min="8" max="24" value="10">
+                <button class="font-size-btn" id="ui-size-up">+</button>
+            </div>
+        </div>
+        <div class="preview-container">
+            <label>プレビュー</label>
+            <div id="ui-preview-container" style="background:#1e1e1e;border:1px solid #3e3e42;border-radius:4px;padding:12px;flex:1;overflow:auto;display:flex;align-items:center;justify-content:center;">
+                <div class="ui-preview" id="ui-preview-status">行 1, 列 1 | 行数: 0 | 文字数: 0</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="buttons">
+        <button class="btn btn-cancel" id="btn-cancel">キャンセル</button>
+        <button class="btn btn-ok" id="btn-ok">OK</button>
+    </div>
+    <script>
+        var editorFontFamilySelect = document.getElementById('editor-font-family');
+        var editorFontSizeInput = document.getElementById('editor-font-size');
+        var editorPreview = document.getElementById('editor-preview');
+        var editorSizeUpBtn = document.getElementById('editor-size-up');
+        var editorSizeDownBtn = document.getElementById('editor-size-down');
+
+        var uiFontFamilySelect = document.getElementById('ui-font-family');
+        var uiFontSizeInput = document.getElementById('ui-font-size');
+        var uiPreviewStatus = document.getElementById('ui-preview-status');
+        var uiSizeUpBtn = document.getElementById('ui-size-up');
+        var uiSizeDownBtn = document.getElementById('ui-size-down');
+
+        var btnOk = document.getElementById('btn-ok');
+        var btnCancel = document.getElementById('btn-cancel');
+
+        function updateEditorPreview() {
+            var family = editorFontFamilySelect.value;
+            var size = parseInt(editorFontSizeInput.value) || 12;
+            editorPreview.style.fontFamily = "'" + family + "'";
+            editorPreview.style.fontSize = size + 'px';
+        }
+
+        function updateUiPreview() {
+            var family = uiFontFamilySelect.value;
+            var size = parseInt(uiFontSizeInput.value) || 10;
+            uiPreviewStatus.style.fontFamily = "'" + family + "'";
+            uiPreviewStatus.style.fontSize = size + 'px';
+        }
+
+        function populateFonts(selectEl, fonts, currentFamily) {
+            selectEl.innerHTML = '';
+            for (var i = 0; i < fonts.length; i++) {
+                var opt = document.createElement('option');
+                opt.value = fonts[i];
+                opt.textContent = fonts[i];
+                if (fonts[i] === currentFamily) {
+                    opt.selected = true;
+                }
+                selectEl.appendChild(opt);
+            }
+        }
+
+        window.electronAPI.onFontSettingsInit(function(data) {
+            populateFonts(editorFontFamilySelect, data.fonts, data.editorFamily);
+            editorFontSizeInput.value = data.editorSize;
+            updateEditorPreview();
+
+            populateFonts(uiFontFamilySelect, data.fonts, data.uiFamily);
+            uiFontSizeInput.value = data.uiSize;
+            updateUiPreview();
+        });
+
+        editorFontFamilySelect.addEventListener('change', updateEditorPreview);
+        editorFontSizeInput.addEventListener('input', updateEditorPreview);
+        uiFontFamilySelect.addEventListener('change', updateUiPreview);
+        uiFontSizeInput.addEventListener('input', updateUiPreview);
+
+        editorSizeUpBtn.addEventListener('click', function() {
+            var size = parseInt(editorFontSizeInput.value) || 12;
+            size = Math.min(48, size + 1);
+            editorFontSizeInput.value = size;
+            updateEditorPreview();
+        });
+        editorSizeDownBtn.addEventListener('click', function() {
+            var size = parseInt(editorFontSizeInput.value) || 12;
+            size = Math.max(8, size - 1);
+            editorFontSizeInput.value = size;
+            updateEditorPreview();
+        });
+        uiSizeUpBtn.addEventListener('click', function() {
+            var size = parseInt(uiFontSizeInput.value) || 10;
+            size = Math.min(24, size + 1);
+            uiFontSizeInput.value = size;
+            updateUiPreview();
+        });
+        uiSizeDownBtn.addEventListener('click', function() {
+            var size = parseInt(uiFontSizeInput.value) || 10;
+            size = Math.max(8, size - 1);
+            uiFontSizeInput.value = size;
+            updateUiPreview();
+        });
+
+        btnOk.addEventListener('click', function() {
+            var editorFamily = editorFontFamilySelect.value;
+            var editorSize = parseInt(editorFontSizeInput.value) || 12;
+            editorSize = Math.max(8, Math.min(48, editorSize));
+            var uiFamily = uiFontFamilySelect.value;
+            var uiSize = parseInt(uiFontSizeInput.value) || 10;
+            uiSize = Math.max(8, Math.min(24, uiSize));
+            window.electronAPI.applyFontSettings({
+                editor: { family: editorFamily, size: editorSize },
+                ui: { family: uiFamily, size: uiSize }
+            });
+        });
+
+        btnCancel.addEventListener('click', function() {
+            window.close();
+        });
+
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') window.close();
+        });
+
+        if (window.electronAPI) {
+            window.electronAPI.onApplyDialogFont(function(config) {
+                if (config && config.ui) {
+                    document.documentElement.style.setProperty('--ui-font-family', "'" + config.ui.family + "'");
+                    document.documentElement.style.setProperty('--ui-font-size', config.ui.size + 'px');
+                }
+            });
+        }
+    </script>
+</body>
+</html>

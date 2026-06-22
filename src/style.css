@@ -49,6 +49,8 @@ body {
     box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
     z-index: 1000;
     animation: slideUp 0.25s ease;
+    font-family: var(--ui-font-family);
+    font-size: var(--ui-font-size);
 }
 .conflict-toolbar.hidden { display: none; }
 
@@ -70,6 +72,8 @@ body {
     width: 100%;
     pointer-events: auto;
     z-index: 10;
+    font-family: var(--ui-font-family);
+    font-size: var(--ui-font-size);
 }
 
 .conflict-panel {
@@ -89,6 +93,7 @@ body {
     padding: 6px 12px;
     background: #2d2d30;
     border-bottom: 1px solid #3e3e42;
+    font-family: var(--ui-font-family);
     font-size: 1.2em;
     font-weight: 600;
     color: #cccccc;
@@ -109,6 +114,7 @@ body {
 
 .conflict-panel-side-title {
     padding: 4px 10px;
+    font-family: var(--ui-font-family);
     font-size: 1.1em;
     font-weight: 600;
     text-align: center;
@@ -127,11 +133,11 @@ body {
 .conflict-panel-side-content {
     padding: 6px 10px;
     font-family: 'Consolas', 'Courier New', monospace;
-    font-size: 12px;
+    font-size: calc(var(--ui-font-size) + 1px);
     line-height: 1.5;
     white-space: pre-wrap;
     word-break: break-word;
-    max-height: 120px;
+    max-height: 100px;
     overflow-y: auto;
     background: #1e1e1e;
     color: #d4d4d4;
@@ -151,6 +157,7 @@ body {
     border-radius: 4px;
     background: rgba(255, 255, 255, 0.08);
     color: #ccc;
+    font-family: var(--ui-font-family);
     font-size: 1.1em;
     cursor: pointer;
     transition: all 0.15s;

@@ -22,6 +22,7 @@ let currentFontFamily = 'Consolas';
 let currentFontSize = 12;
 let currentUiFontFamily = 'Segoe UI';
 let currentUiFontSize = 10;
+let currentEncoding = 'utf-8';
 let blockChoices = [];               // null=未解決, 'mine'=自分, 'external'=外部
 let conflictViewZoneIds = [];        // View Zone ID配列
 let conflictWidgets = [];             // ContentWidget配列
@@ -188,12 +189,12 @@ function updateChangeIndicator() {
 function addConflictPanelsForBlocks(blocks) {
     if (!editor || !pendingFileChange) return;
 
+    // 一旦仮の高さでViewZoneとWidgetを作成
     editor.changeViewZones(function (accessor) {
         for (var i = 0; i < blocks.length; i++) {
             var b = blocks[i];
-            var panelHeight = 220;
+            var panelHeight = 180; // 仮の高さ
 
-            // ViewZone（空白領域）を作成
             var zoneDomNode = document.createElement('div');
             zoneDomNode.className = 'conflict-viewzone-spacer';
             zoneDomNode.style.width = '100%';
@@ -206,18 +207,46 @@ function addConflictPanelsForBlocks(blocks) {
             });
             conflictViewZoneIds.push({ zoneId: zoneId, blockIndex: b.blockIndex });
 
-            // ContentWidget（インタラクティブUI）を作成して同じ位置に配置
-            var widget = createConflictWidget(b.blockIndex, b.endLine, panelHeight, b.hunk);
+            var widget = createConflictWidget(b.blockIndex, b.endLine, b.hunk);
             editor.addContentWidget(widget);
-            conflictWidgets.push({ widget: widget, blockIndex: b.blockIndex });
+            conflictWidgets.push({ widget: widget, blockIndex: b.blockIndex, zoneId: zoneId });
         }
     });
 
-    // Widget追加後に幅をエディタ全体に広げる
     updateConflictWidgetWidths();
+
+    // 実際の高さを測定してViewZoneを更新
+    setTimeout(function () {
+        if (!editor || conflictWidgets.length === 0) return;
+        editor.changeViewZones(function (accessor) {
+            for (var i = 0; i < conflictWidgets.length; i++) {
+                var w = conflictWidgets[i];
+                var actualHeight = w.widget._domNode.offsetHeight;
+                if (actualHeight > 0) {
+                    accessor.removeZone(w.zoneId);
+                    var zoneDomNode = document.createElement('div');
+                    zoneDomNode.className = 'conflict-viewzone-spacer';
+                    zoneDomNode.style.width = '100%';
+                    zoneDomNode.style.height = actualHeight + 'px';
+                    var newZoneId = accessor.addZone({
+                        afterLineNumber: w.widget._afterLine,
+                        heightInPx: actualHeight,
+                        domNode: zoneDomNode
+                    });
+                    for (var j = 0; j < conflictViewZoneIds.length; j++) {
+                        if (conflictViewZoneIds[j].zoneId === w.zoneId) {
+                            conflictViewZoneIds[j].zoneId = newZoneId;
+                            break;
+                        }
+                    }
+                    w.zoneId = newZoneId;
+                }
+            }
+        });
+    }, 50);
 }
 
-function createConflictWidget(blockIndex, afterLine, panelHeight, hunk) {
+function createConflictWidget(blockIndex, afterLine, hunk) {
     var widgetId = 'conflict-widget-' + blockIndex;
     var domNode = document.createElement('div');
     domNode.className = 'conflict-panel-wrapper';
@@ -226,8 +255,6 @@ function createConflictWidget(blockIndex, afterLine, panelHeight, hunk) {
 
     var innerNode = document.createElement('div');
     innerNode.className = 'conflict-panel';
-    innerNode.style.height = panelHeight + 'px';
-    innerNode.style.overflow = 'hidden';
 
     buildConflictPanelContent(innerNode, blockIndex, hunk);
 
@@ -251,12 +278,29 @@ function createConflictWidget(blockIndex, afterLine, panelHeight, hunk) {
     };
 }
 
-// エディタのレイアウト変更時にWidgetの幅を更新
+// エディタのレイアウト変更時にWidgetの幅を更新（ミニマップ領域を除外）
 function updateConflictWidgetWidths() {
     if (!editor || conflictWidgets.length === 0) return;
-    var width = editor.getLayoutInfo().contentWidth;
+
+    var layoutInfo = editor.getLayoutInfo();
+
+    // ContentWidget は getPosition() の column: 1 により、Monaco側で本文開始位置へ配置される。
+    // そのため左位置は動かさず、幅だけを「本文開始位置〜ミニマップ手前」に制限する。
+    var widgetLeft = layoutInfo.contentLeft;
+    var width = layoutInfo.contentWidth;
+
+    if (layoutInfo.minimap && layoutInfo.minimap.minimapWidth > 0 && layoutInfo.minimap.minimapLeft > widgetLeft) {
+        width = Math.min(width, layoutInfo.minimap.minimapLeft - widgetLeft - 8);
+    } else {
+        width = Math.min(width, layoutInfo.width - widgetLeft - layoutInfo.verticalScrollbarWidth - 8);
+    }
+
+    width = Math.max(100, width);
+
     for (var i = 0; i < conflictWidgets.length; i++) {
         conflictWidgets[i].widget._domNode.style.width = width + 'px';
+        conflictWidgets[i].widget._domNode.style.maxWidth = width + 'px';
+        conflictWidgets[i].widget._domNode.style.marginLeft = '0';
     }
 }
 
@@ -688,6 +732,7 @@ require(['vs/editor/editor.main'], function () {
     /* ─── 言語・テーマ・折り返し（メニューから操作） ─ */
     var statusLanguage = document.getElementById('status-language');
     var statusWrap = document.getElementById('status-wrap');
+    var statusEncoding = document.getElementById('status-encoding');
     var isWrapped = false;
 
     var langLabels = {
@@ -699,6 +744,45 @@ require(['vs/editor/editor.main'], function () {
         currentLanguage = lang;
         monaco.editor.setModelLanguage(editor.getModel(), lang);
         statusLanguage.textContent = langLabels[lang] || lang;
+    }
+
+    /* ─── 文字コード（エンコーディング） ──────────── */
+    var encodingLabels = {
+        'utf-8': 'UTF-8', 'utf-16le': 'UTF-16 LE', 'utf-16be': 'UTF-16 BE',
+        'shift_jis': 'Shift_JIS', 'euc-jp': 'EUC-JP'
+    };
+    var encodingCycle = ['utf-8', 'shift_jis', 'euc-jp', 'utf-16le', 'utf-16be'];
+
+    function updateEncodingStatus() {
+        if (!statusEncoding) return;
+        statusEncoding.textContent = encodingLabels[currentEncoding] || currentEncoding;
+        statusEncoding.title = '文字コード: ' + (encodingLabels[currentEncoding] || currentEncoding) + '（クリックで切り替え）';
+    }
+
+    async function setEncoding(enc) {
+        currentEncoding = enc;
+        updateEncodingStatus();
+        // 開いているファイルがある場合は、新しい文字コードで再デコードして読み直す。
+        // 未保存の変更がある場合は内容を保持し、保存時の文字コードのみ変更する。
+        if (currentFilePath) {
+            try {
+                var result = await window.electronAPI.reopenWithEncoding(enc);
+                if (result && !isDirty) {
+                    isApplyingFileChange = true;
+                    editor.setValue(result.content);
+                    isApplyingFileChange = false;
+                    lastKnownFileContent = result.content;
+                    isDirty = false;
+                    clearChangeHighlights();
+                    hidePendingCollisionIndicator();
+                    hideConflictToolbar();
+                    pendingFileChange = null;
+                    blockChoices = [];
+                    updateFileName();
+                    updateStatusBar();
+                }
+            } catch (err) { console.error('Reopen with encoding error:', err); }
+        }
     }
 
     function updateWrapStatus() {
@@ -829,6 +913,7 @@ require(['vs/editor/editor.main'], function () {
 
     updateStatusBar();
     updateFontStatus();
+    updateEncodingStatus();
 
     /* ─── 設定ファイルからフォント読み込み ────────── */
     window.electronAPI.loadFontConfig().then(function (config) {
@@ -852,35 +937,49 @@ require(['vs/editor/editor.main'], function () {
         try {
             var result = await window.electronAPI.openFile(null);
             if (!result) return;
-            currentFilePath = result.path;
-            isDirty = false;
-            lastKnownFileContent = result.content;
-            pendingFileChange = null;
-            blockChoices = [];
-            isApplyingFileChange = true;
-            editor.setValue(result.content);
-            isApplyingFileChange = false;
-            clearChangeHighlights();
-            hidePendingCollisionIndicator();
-            hideConflictToolbar();
 
-            var ext = result.path.split('.').pop().toLowerCase();
-            var langMap = { js:'javascript', ts:'typescript', html:'html', css:'css', json:'json', py:'python', md:'markdown', txt:'plaintext' };
-            var lang = langMap[ext] || 'plaintext';
-            currentLanguage = lang;
-            monaco.editor.setModelLanguage(editor.getModel(), lang);
-            statusLanguage.textContent = langLabels[lang] || lang;
-            updateFileName();
-            updateStatusBar();
-            window.electronAPI.startWatch(result.path);
+            // エディタにテキストがある場合は新しいウィンドウで開く
+            var currentContent = editor.getValue();
+            if (currentContent && currentContent.trim().length > 0) {
+                window.electronAPI.openFileInNewWindow(result.path);
+                return;
+            }
+
+            loadFileContent(result.path, result.content, result.encoding);
         } catch (err) { console.error('Open file error:', err); }
+    }
+
+    function loadFileContent(filePath, content, encoding) {
+        currentFilePath = filePath;
+        currentEncoding = encoding || 'utf-8';
+        updateEncodingStatus();
+        isDirty = false;
+        lastKnownFileContent = content;
+        pendingFileChange = null;
+        blockChoices = [];
+        isApplyingFileChange = true;
+        editor.setValue(content);
+        isApplyingFileChange = false;
+        clearChangeHighlights();
+        hidePendingCollisionIndicator();
+        hideConflictToolbar();
+
+        var ext = filePath.split('.').pop().toLowerCase();
+        var langMap = { js:'javascript', ts:'typescript', html:'html', css:'css', json:'json', py:'python', md:'markdown', txt:'plaintext' };
+        var lang = langMap[ext] || 'plaintext';
+        currentLanguage = lang;
+        monaco.editor.setModelLanguage(editor.getModel(), lang);
+        statusLanguage.textContent = langLabels[lang] || lang;
+        updateFileName();
+        updateStatusBar();
+        window.electronAPI.startWatch(filePath);
     }
 
     async function saveFile(saveAs) {
         try {
             var content = editor.getValue();
             var filePath = saveAs ? null : currentFilePath;
-            var savedPath = await window.electronAPI.saveFile({ filePath: filePath, content: content, language: currentLanguage });
+            var savedPath = await window.electronAPI.saveFile({ filePath: filePath, content: content, language: currentLanguage, encoding: currentEncoding });
             if (savedPath) {
                 currentFilePath = savedPath;
                 isDirty = false;
@@ -891,8 +990,10 @@ require(['vs/editor/editor.main'], function () {
                 hideConflictToolbar();
                 updateFileName();
                 window.electronAPI.startWatch(savedPath);
+                return true;
             }
-        } catch (err) { console.error('Save file error:', err); }
+            return false;
+        } catch (err) { console.error('Save file error:', err); return false; }
     }
 
     /* ─── メニューアクション ────────────────────── */
@@ -921,6 +1022,11 @@ require(['vs/editor/editor.main'], function () {
             case 'font-size-reset': resetFontSize(); break;
             case 'wrap-on': isWrapped = true; editor.updateOptions({ wordWrap: 'on' }); setTimeout(function() { editor.layout(); }, 50); updateWrapStatus(); break;
             case 'wrap-off': isWrapped = false; editor.updateOptions({ wordWrap: 'off' }); setTimeout(function() { editor.layout(); }, 50); updateWrapStatus(); break;
+            case 'set-encoding-utf-8': setEncoding('utf-8'); break;
+            case 'set-encoding-utf-16le': setEncoding('utf-16le'); break;
+            case 'set-encoding-utf-16be': setEncoding('utf-16be'); break;
+            case 'set-encoding-shift_jis': setEncoding('shift_jis'); break;
+            case 'set-encoding-euc-jp': setEncoding('euc-jp'); break;
         }
     });
 
@@ -931,6 +1037,34 @@ require(['vs/editor/editor.main'], function () {
         } else {
             handleFileChange(data.content);
         }
+    });
+
+    /* ─── 新しいウィンドウで起動した場合のファイル読み込み ── */
+    window.electronAPI.onOpenFileOnStartup(function (filePath) {
+        window.electronAPI.openFile(filePath).then(function (result) {
+            if (result) {
+                loadFileContent(result.path, result.content, result.encoding);
+            }
+        });
+    });
+
+    /* ─── ウィンドウクローズ時の未保存確認 ────────── */
+    window.electronAPI.onCloseRequested(async function () {
+        if (!isDirty) {
+            window.electronAPI.closeWindow();
+            return;
+        }
+        var choice = await window.electronAPI.confirmClose();
+        if (choice === 'save') {
+            var saved = await saveFile(false);
+            if (saved) {
+                window.electronAPI.closeWindow();
+            }
+            // 保存がキャンセルされた場合はウィンドウを閉じない
+        } else if (choice === 'discard') {
+            window.electronAPI.closeWindow();
+        }
+        // 'cancel' の場合は何もしない（ウィンドウは閉じない）
     });
 
     /* ─── フォント設定適用 ──────────────────────── */
@@ -972,6 +1106,16 @@ require(['vs/editor/editor.main'], function () {
         setTimeout(function() { editor.layout(); }, 50);
         updateWrapStatus();
     });
+
+    var statusEncodingEl = document.getElementById('status-encoding');
+    if (statusEncodingEl) {
+        statusEncodingEl.addEventListener('click', function (e) {
+            e.stopPropagation();
+            var idx = encodingCycle.indexOf(currentEncoding);
+            var next = encodingCycle[(idx + 1) % encodingCycle.length];
+            setEncoding(next);
+        });
+    }
 
     function copyToClipboard(text) {
         navigator.clipboard.writeText(text).then(function () {

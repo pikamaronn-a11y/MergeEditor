@@ -2,6 +2,27 @@ const { app, BrowserWindow, ipcMain, dialog, Menu } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { execSync } = require('child_process');
+const iconv = require('iconv-lite');
+
+// ─── 文字コード（エンコーディング）ユーティリティ ───
+// 内部ID -> iconv-lite のエンコーディング名
+const ENCODING_MAP = {
+    'utf-8': 'utf8',
+    'utf-16le': 'utf16le',
+    'utf-16be': 'utf16be',
+    'shift_jis': 'shiftjis',
+    'euc-jp': 'eucjp'
+};
+
+function decodeBuffer(buffer, encoding) {
+    const ic = ENCODING_MAP[encoding] || 'utf8';
+    return iconv.decode(buffer, ic);
+}
+
+function encodeText(text, encoding) {
+    const ic = ENCODING_MAP[encoding] || 'utf8';
+    return iconv.encode(text, ic);
+}
 
 // ─── ウィンドウごとの状態管理 ─────────────────────
 // winId -> { fileWatcher, watchDebounceTimer, currentWatchedFile }
@@ -9,7 +30,7 @@ const windowStates = new Map();
 
 function getWindowState(winId) {
     if (!windowStates.has(winId)) {
-        windowStates.set(winId, { fileWatcher: null, watchDebounceTimer: null, currentWatchedFile: null });
+        windowStates.set(winId, { fileWatcher: null, watchDebounceTimer: null, currentWatchedFile: null, encoding: 'utf-8' });
     }
     return windowStates.get(winId);
 }
@@ -38,7 +59,7 @@ function startFileWatch(winId, filePath) {
                         stopFileWatch(winId);
                         return;
                     }
-                    const content = fs.readFileSync(filePath, 'utf-8');
+                    const content = decodeBuffer(fs.readFileSync(filePath), state.encoding);
                     if (win && !win.isDestroyed()) {
                         win.webContents.send('file-changed', {
                             path: filePath,
@@ -133,7 +154,7 @@ function saveFontConfig(settings) {
 }
 
 // ─── ウィンドウ作成 ───────────────────────────────
-function createWindow() {
+function createWindow(openFilePath) {
     const win = new BrowserWindow({
         width: 1200,
         height: 800,
@@ -156,12 +177,20 @@ function createWindow() {
     // 起動時にズームを100%にリセット
     win.webContents.on('did-finish-load', () => {
         win.webContents.setZoomFactor(1.0);
+        if (openFilePath) {
+            win.webContents.send('open-file-on-startup', openFilePath);
+        }
     });
 
     // ズーム変更を防止（Ctrl+マウスホイール等で変更されても1.0に戻す）
     win.webContents.on('zoom-changed', (event, zoomDirection) => {
         event.preventDefault();
         win.webContents.setZoomFactor(1.0);
+    });
+
+    win.on('close', (e) => {
+        e.preventDefault();
+        win.webContents.send('close-requested');
     });
 
     win.on('closed', () => {
@@ -265,6 +294,16 @@ function buildMenu() {
                         { label: 'High Contrast', type: 'radio', click: () => sendAction('set-theme-hc-black') }
                     ]
                 },
+                {
+                    label: '文字コード',
+                    submenu: [
+                        { label: 'UTF-8', type: 'radio', checked: true, click: () => sendAction('set-encoding-utf-8') },
+                        { label: 'UTF-16 LE', type: 'radio', click: () => sendAction('set-encoding-utf-16le') },
+                        { label: 'UTF-16 BE', type: 'radio', click: () => sendAction('set-encoding-utf-16be') },
+                        { label: 'Shift_JIS', type: 'radio', click: () => sendAction('set-encoding-shift_jis') },
+                        { label: 'EUC-JP', type: 'radio', click: () => sendAction('set-encoding-euc-jp') }
+                    ]
+                },
                 { label: '折り返し', type: 'checkbox', checked: false, accelerator: 'CmdOrCtrl+Shift+W', click: (menuItem) => sendAction(menuItem.checked ? 'wrap-on' : 'wrap-off') },
                 { type: 'separator' },
                 { label: 'ズームイン', accelerator: 'CmdOrCtrl+=', click: () => sendAction('font-size-up') },
@@ -344,7 +383,22 @@ function buildMenu() {
 
 app.whenReady().then(() => {
     buildMenu();
-    createWindow();
+    // コマンドライン引数からファイルパスを取得（ファイル関連付け対応）
+    let openFilePath = null;
+    const args = process.argv.slice(1); // 最初の要素（アプリパス）を除外
+    for (const arg of args) {
+        if (!arg.startsWith('-') && !arg.startsWith('--') && fs.existsSync(arg)) {
+            try {
+                if (fs.statSync(arg).isFile()) {
+                    openFilePath = path.resolve(arg);
+                    break;
+                }
+            } catch (e) {
+                // statSyncエラーは無視
+            }
+        }
+    }
+    createWindow(openFilePath);
 });
 
 app.on('window-all-closed', () => { app.quit(); });
@@ -363,7 +417,7 @@ ipcMain.on('set-title', (event, title) => {
 
 // ─── IPC ハンドラー（ウィンドウごとに処理） ───────
 
-ipcMain.handle('open-file', async (event, filePath) => {
+ipcMain.handle('open-file', async (event, filePath, encoding) => {
     const win = BrowserWindow.fromWebContents(event.sender);
     if (!filePath) {
         const result = await dialog.showOpenDialog(win, {
@@ -373,11 +427,17 @@ ipcMain.handle('open-file', async (event, filePath) => {
         if (result.canceled) return null;
         filePath = result.filePaths[0];
     }
-    const content = fs.readFileSync(filePath, 'utf-8');
-    return { path: filePath, content };
+    if (fs.statSync(filePath).isDirectory()) {
+        dialog.showErrorBox('エラー', 'ディレクトリは開けません: ' + filePath);
+        return null;
+    }
+    const enc = encoding || 'utf-8';
+    const content = decodeBuffer(fs.readFileSync(filePath), enc);
+    if (win) getWindowState(win.id).encoding = enc;
+    return { path: filePath, content, encoding: enc };
 });
 
-ipcMain.handle('save-file', async (event, { filePath, content, language }) => {
+ipcMain.handle('save-file', async (event, { filePath, content, language, encoding }) => {
     const win = BrowserWindow.fromWebContents(event.sender);
     if (!filePath) {
         const allFilters = [
@@ -412,7 +472,9 @@ ipcMain.handle('save-file', async (event, { filePath, content, language }) => {
         if (result.canceled) return null;
         filePath = result.filePath;
     }
-    fs.writeFileSync(filePath, content, 'utf-8');
+    const enc = encoding || 'utf-8';
+    fs.writeFileSync(filePath, encodeText(content, enc));
+    if (win) getWindowState(win.id).encoding = enc;
     return filePath;
 });
 
@@ -432,10 +494,27 @@ ipcMain.handle('revalidate-file', async (event) => {
     if (!state.currentWatchedFile) return null;
     try {
         if (!fs.existsSync(state.currentWatchedFile)) return null;
-        const content = fs.readFileSync(state.currentWatchedFile, 'utf-8');
+        const content = decodeBuffer(fs.readFileSync(state.currentWatchedFile), state.encoding);
         return { path: state.currentWatchedFile, content };
     } catch (err) {
         console.error('Revalidate file read error:', err);
+        return null;
+    }
+});
+
+// ─── 文字コードを指定して再読み込み ───────────────
+ipcMain.handle('reopen-with-encoding', async (event, encoding) => {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    const state = getWindowState(win.id);
+    state.encoding = encoding || 'utf-8';
+    if (!state.currentWatchedFile || !fs.existsSync(state.currentWatchedFile)) {
+        return null;
+    }
+    try {
+        const content = decodeBuffer(fs.readFileSync(state.currentWatchedFile), state.encoding);
+        return { path: state.currentWatchedFile, content, encoding: state.encoding };
+    } catch (err) {
+        console.error('Reopen with encoding error:', err);
         return null;
     }
 });
@@ -493,4 +572,39 @@ ipcMain.handle('load-font-config', async (event) => {
 
 ipcMain.on('save-font-config', (event, settings) => {
     saveFontConfig(settings);
+});
+
+// ─── 未保存確認ダイアログ（ネイティブ） ───────────
+ipcMain.handle('confirm-close', async (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    if (!win) return 'cancel';
+    const result = await dialog.showMessageBox(win, {
+        type: 'warning',
+        title: '未保存の変更',
+        message: '未保存の変更があります。保存しますか？',
+        buttons: ['保存(&S)', '保存しない(&N)', 'キャンセル(&C)'],
+        defaultId: 0,
+        cancelId: 2,
+        noLink: true
+    });
+    if (result.response === 0) return 'save';
+    if (result.response === 1) return 'discard';
+    return 'cancel';
+});
+
+// ─── ウィンドウを強制終了（closeイベント回避） ────
+ipcMain.on('close-window', (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    if (win) {
+        win.removeAllListeners('close');
+        win.close();
+    }
+});
+
+// ─── 新しいウィンドウでファイルを開く ──────────────
+ipcMain.on('open-file-in-new-window', (event, filePath) => {
+    const newWin = createWindow();
+    newWin.webContents.on('did-finish-load', () => {
+        newWin.webContents.send('open-file-on-startup', filePath);
+    });
 });

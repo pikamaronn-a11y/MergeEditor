@@ -4,8 +4,9 @@ const { contextBridge, ipcRenderer, webFrame } = require('electron');
 webFrame.setZoomFactor(1.0);
 
 contextBridge.exposeInMainWorld('electronAPI', {
-    openFile: (filePath) => ipcRenderer.invoke('open-file', filePath),
+    openFile: (filePath, encoding) => ipcRenderer.invoke('open-file', filePath, encoding),
     saveFile: (data) => ipcRenderer.invoke('save-file', data),
+    reopenWithEncoding: (encoding) => ipcRenderer.invoke('reopen-with-encoding', encoding),
     startWatch: (filePath) => ipcRenderer.invoke('start-watch', filePath),
     stopWatch: () => ipcRenderer.invoke('stop-watch'),
     revalidateFile: () => ipcRenderer.invoke('revalidate-file'),
@@ -18,5 +19,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
     onFontSettingsInit: (callback) => ipcRenderer.on('font-settings-init', (event, data) => callback(data)),
     applyFontSettings: (settings) => ipcRenderer.send('font-settings-apply', settings),
     saveFontConfig: (settings) => ipcRenderer.send('save-font-config', settings),
-    onApplyDialogFont: (callback) => ipcRenderer.on('apply-dialog-font', (event, data) => callback(data))
+    onApplyDialogFont: (callback) => ipcRenderer.on('apply-dialog-font', (event, data) => callback(data)),
+    openFileInNewWindow: (filePath) => ipcRenderer.send('open-file-in-new-window', filePath),
+    onOpenFileOnStartup: (callback) => ipcRenderer.on('open-file-on-startup', (event, filePath) => callback(filePath)),
+    onCloseRequested: (callback) => ipcRenderer.on('close-requested', () => callback()),
+    confirmClose: () => ipcRenderer.invoke('confirm-close'),
+    closeWindow: () => ipcRenderer.send('close-window')
 });
